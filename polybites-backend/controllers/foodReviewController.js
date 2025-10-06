@@ -160,7 +160,7 @@ export const deleteFoodReview = async (req, res) => {
     }
 
     // Delete all likes associated with this review first
-    await db.query('DELETE FROM likes WHERE food_review_id = $1', [id]);
+    await db.query('DELETE FROM food_review_likes WHERE food_review_id = $1', [id]);
 
     // Then delete the review
     await db.query('DELETE FROM food_reviews WHERE id = $1 RETURNING *', [id]);
@@ -181,7 +181,7 @@ export const getLike = async (req, res) => {
 
   try {
     const { rows } = await db.query(
-      'SELECT * FROM likes WHERE food_review_id = $1 AND user_id = $2',
+      'SELECT * FROM food_review_likes WHERE food_review_id = $1 AND user_id = $2',
       [reviewId, userId]
     );
     res.json({ exists: rows.length > 0 });
@@ -192,7 +192,9 @@ export const getLike = async (req, res) => {
 };
 
 export const toggleLike = async (req, res) => {
-  const { review_id, user_id } = req.body;
+  // Get review_id from URL params or body
+  const review_id = req.params.reviewId || req.body.review_id;
+  const { user_id } = req.body;
 
   if (!review_id || !user_id) {
     return res.status(400).json({ error: 'Review ID and User ID are required' });
@@ -201,27 +203,27 @@ export const toggleLike = async (req, res) => {
   try {
     // First check if the like already exists
     const { rows: existingLike } = await db.query(
-      'SELECT * FROM likes WHERE food_review_id = $1 AND user_id = $2',
+      'SELECT * FROM food_review_likes WHERE food_review_id = $1 AND user_id = $2',
       [review_id, user_id]
     );
 
     if (existingLike.length > 0) {
       // Like exists, so remove it
       await db.query(
-        'DELETE FROM likes WHERE food_review_id = $1 AND user_id = $2',
+        'DELETE FROM food_review_likes WHERE food_review_id = $1 AND user_id = $2',
         [review_id, user_id]
       );
     } else {
       // Like doesn't exist, so add it
       await db.query(
-        'INSERT INTO likes (food_review_id, user_id) VALUES ($1, $2)',
+        'INSERT INTO food_review_likes (food_review_id, user_id) VALUES ($1, $2)',
         [review_id, user_id]
       );
     }
 
     // Get the updated like count
     const { rows: [likeCount] } = await db.query(
-      'SELECT COUNT(*) as likes FROM likes WHERE food_review_id = $1',
+      'SELECT COUNT(*) as likes FROM food_review_likes WHERE food_review_id = $1',
       [review_id]
     );
 
@@ -231,7 +233,8 @@ export const toggleLike = async (req, res) => {
     });
   } catch (err) {
     console.error('Database Query Error:', err.message);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Error details:', err);
+    res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 };
 
@@ -240,7 +243,7 @@ export const getReviewLikes = async (req, res) => {
 
   try {
     const { rows: [result] } = await db.query(
-      'SELECT COUNT(*) as likes FROM likes WHERE food_review_id = $1',
+      'SELECT COUNT(*) as likes FROM food_review_likes WHERE food_review_id = $1',
       [reviewId]
     );
 
@@ -274,7 +277,7 @@ export const getFoodReviewsByUserId = async (req, res) => {
        JOIN restaurants r ON f.restaurant_id = r.id 
        LEFT JOIN (
          SELECT food_review_id, COUNT(*) as like_count
-         FROM likes
+         FROM food_review_likes
          GROUP BY food_review_id
        ) l ON fr.id = l.food_review_id
        WHERE fr.user_id = $1 
