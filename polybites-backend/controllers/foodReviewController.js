@@ -289,4 +289,38 @@ export const getFoodReviewsByUserId = async (req, res) => {
     console.error('Database Query Error:', err.message);
     res.status(500).json({ error: 'Internal server error' });
   }
-}; 
+};
+
+export const reportFoodReview = async (req, res) => {
+  const { food_review_id, reason } = req.body;
+
+  if (!food_review_id) {
+    return res.status(400).json({ error: 'Food review ID is required' });
+  }
+
+  try {
+    // Check if the review exists
+    const { rows: reviewCheck } = await db.query(
+      'SELECT id FROM food_reviews WHERE id = $1',
+      [food_review_id]
+    );
+
+    if (reviewCheck.length === 0) {
+      return res.status(404).json({ error: 'Food review not found' });
+    }
+
+    // Create the report
+    const { rows } = await db.query(
+      'INSERT INTO food_review_reports (food_review_id, reason) VALUES ($1, $2) RETURNING *',
+      [food_review_id, reason]
+    );
+
+    res.status(201).json({ 
+      message: 'Report submitted successfully',
+      report: rows[0]
+    });
+  } catch (err) {
+    console.error('Database Query Error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};

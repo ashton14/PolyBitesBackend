@@ -221,3 +221,36 @@ export const getGeneralReviewStats = async (req, res) => {
   }
 };
 
+export const reportGeneralReview = async (req, res) => {
+  const { general_review_id, reason } = req.body;
+
+  if (!general_review_id) {
+    return res.status(400).json({ error: 'General review ID is required' });
+  }
+
+  try {
+    // Check if the review exists
+    const { rows: reviewCheck } = await db.query(
+      'SELECT id FROM general_reviews WHERE id = $1',
+      [general_review_id]
+    );
+
+    if (reviewCheck.length === 0) {
+      return res.status(404).json({ error: 'General review not found' });
+    }
+
+    // Create the report
+    const { rows } = await db.query(
+      'INSERT INTO general_review_reports (general_review_id, reason) VALUES ($1, $2) RETURNING *',
+      [general_review_id, reason]
+    );
+
+    res.status(201).json({ 
+      message: 'Report submitted successfully',
+      report: rows[0]
+    });
+  } catch (err) {
+    console.error('Database Query Error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};

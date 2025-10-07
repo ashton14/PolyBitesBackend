@@ -9,7 +9,8 @@ import {
   getLike, 
   toggleLike, 
   getReviewLikes,
-  getGeneralReviewStats
+  getGeneralReviewStats,
+  reportGeneralReview
 } from '../controllers/generalReviewController.js';
 
 const router = express.Router();
@@ -23,6 +24,9 @@ router.get('/user/:userId', getGeneralReviewsByUserId);
 router.get('/:reviewId/likes', getReviewLikes);
 router.post('/:reviewId/toggle-like', toggleLike);
 router.get('/:reviewId/like/:userId', getLike);
+
+// Report route
+router.post('/report', reportGeneralReview);
 
 // Generic routes last
 router.get('/', getGeneralReviews);

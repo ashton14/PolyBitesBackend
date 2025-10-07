@@ -1,5 +1,5 @@
 import express from 'express';
-import { getFoodReviews, getFoodReviewById, createFoodReview, getFoodReviewsByFoodId, getFoodReviewsByRestaurantId, getFoodReviewDetails, getFoodReviewStats, getFoodReviewStatsByRestaurant, deleteFoodReview, getLike, toggleLike, getReviewLikes, getFoodReviewsByUserId } from '../controllers/foodReviewController.js';
+import { getFoodReviews, getFoodReviewById, createFoodReview, getFoodReviewsByFoodId, getFoodReviewsByRestaurantId, getFoodReviewDetails, getFoodReviewStats, getFoodReviewStatsByRestaurant, deleteFoodReview, getLike, toggleLike, getReviewLikes, getFoodReviewsByUserId, reportFoodReview } from '../controllers/foodReviewController.js';
 
 const router = express.Router();
 
@@ -15,6 +15,9 @@ router.get('/user/:userId', getFoodReviewsByUserId);
 router.get('/:reviewId/likes', getReviewLikes);
 router.post('/:reviewId/toggle-like', toggleLike);
 router.get('/:reviewId/like/:userId', getLike);
+
+// Report route
+router.post('/report', reportFoodReview);
 
 // Generic routes last
 router.get('/', getFoodReviews);
