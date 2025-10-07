@@ -8,6 +8,7 @@ import profileRoutes from './routes/profiles.js';
 import foodRoutes from './routes/foods.js';
 import foodReviewRoutes from './routes/foodReviews.js';
 import restaurantReviewRoutes from './routes/restaurantReviews.js';
+import generalReviewRoutes from './routes/generalReviews.js';
 import messageRoutes from './routes/messages.js';
 
 dotenv.config(); // ✅ correct way to load .env in ESM
@@ -36,6 +37,7 @@ app.use('/api/profiles', profileRoutes);
 app.use('/api/foods', foodRoutes);
 app.use('/api/food-reviews', foodReviewRoutes);
 app.use('/api/restaurant-reviews', restaurantReviewRoutes);
+app.use('/api/general-reviews', generalReviewRoutes);
 app.use('/api/messages', messageRoutes);
 
 // Start Server
