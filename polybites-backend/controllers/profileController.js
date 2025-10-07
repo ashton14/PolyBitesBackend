@@ -160,8 +160,6 @@ export const deleteProfile = async (req, res) => {
   const { auth_id } = req.params;
   const { user_id } = req.body;
 
-  console.log('Delete profile request:', { auth_id, user_id });
-
   // Verify that the user is trying to delete their own profile
   if (user_id !== auth_id) {
     console.log('User ID mismatch:', { user_id, auth_id });
@@ -174,7 +172,6 @@ export const deleteProfile = async (req, res) => {
       'DELETE FROM food_reviews WHERE user_id = $1',
       [auth_id]
     );
-    console.log('Deleted reviews:', reviewsResult.rowCount);
 
     // Then delete the profile
     const { rows } = await db.query(
@@ -193,7 +190,6 @@ export const deleteProfile = async (req, res) => {
       return res.status(500).json({ error: 'Failed to delete user from auth system' });
     }
 
-    console.log('Profile and auth user deleted successfully');
     res.json({ message: 'Profile and auth user deleted successfully' });
   } catch (err) {
     console.error('Database Query Error:', err.message);

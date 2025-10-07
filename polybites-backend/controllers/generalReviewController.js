@@ -222,10 +222,14 @@ export const getGeneralReviewStats = async (req, res) => {
 };
 
 export const reportGeneralReview = async (req, res) => {
-  const { general_review_id, reason } = req.body;
+  const { general_review_id, reason, user_id } = req.body;
 
   if (!general_review_id) {
     return res.status(400).json({ error: 'General review ID is required' });
+  }
+
+  if (!user_id) {
+    return res.status(400).json({ error: 'User ID is required' });
   }
 
   try {
@@ -241,8 +245,8 @@ export const reportGeneralReview = async (req, res) => {
 
     // Create the report
     const { rows } = await db.query(
-      'INSERT INTO general_review_reports (general_review_id, reason) VALUES ($1, $2) RETURNING *',
-      [general_review_id, reason]
+      'INSERT INTO general_review_reports (general_review_id, reason, user_id) VALUES ($1, $2, $3) RETURNING *',
+      [general_review_id, reason, user_id]
     );
 
     res.status(201).json({ 

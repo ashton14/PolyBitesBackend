@@ -292,10 +292,14 @@ export const getFoodReviewsByUserId = async (req, res) => {
 };
 
 export const reportFoodReview = async (req, res) => {
-  const { food_review_id, reason } = req.body;
+  const { food_review_id, reason, user_id } = req.body;
 
   if (!food_review_id) {
     return res.status(400).json({ error: 'Food review ID is required' });
+  }
+
+  if (!user_id) {
+    return res.status(400).json({ error: 'User ID is required' });
   }
 
   try {
@@ -311,8 +315,8 @@ export const reportFoodReview = async (req, res) => {
 
     // Create the report
     const { rows } = await db.query(
-      'INSERT INTO food_review_reports (food_review_id, reason) VALUES ($1, $2) RETURNING *',
-      [food_review_id, reason]
+      'INSERT INTO food_review_reports (food_review_id, reason, user_id) VALUES ($1, $2, $3) RETURNING *',
+      [food_review_id, reason, user_id]
     );
 
     res.status(201).json({ 
