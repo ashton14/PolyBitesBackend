@@ -5,8 +5,26 @@ export const getRestaurants = async (req, res) => {
     const { rows } = await db.query(`
       SELECT 
         r.*,
-        COALESCE(AVG(fr.rating), 0) as average_rating,
-        COUNT(DISTINCT fr.id) as review_count,
+        COALESCE(
+          (SELECT AVG(rating) FROM (
+            SELECT rating FROM food_reviews fr 
+            JOIN foods f ON fr.food_id = f.id 
+            WHERE f.restaurant_id = r.id
+            UNION ALL
+            SELECT rating FROM general_reviews gr 
+            WHERE gr.restaurant_id = r.id
+          ) all_reviews), 0
+        ) as average_rating,
+        (
+          SELECT COUNT(*) FROM (
+            SELECT fr.id FROM food_reviews fr 
+            JOIN foods f ON fr.food_id = f.id 
+            WHERE f.restaurant_id = r.id
+            UNION ALL
+            SELECT gr.id FROM general_reviews gr 
+            WHERE gr.restaurant_id = r.id
+          ) all_reviews
+        ) as review_count,
         COUNT(DISTINCT f.id) as menu_item_count,
         (
           SELECT AVG(food_value) FROM (
@@ -24,7 +42,6 @@ export const getRestaurants = async (req, res) => {
         ) as average_value
       FROM restaurants r
       LEFT JOIN foods f ON f.restaurant_id = r.id
-      LEFT JOIN food_reviews fr ON fr.food_id = f.id
       GROUP BY r.id
       ORDER BY r.id ASC
     `);
@@ -41,8 +58,26 @@ export const getRestaurantById = async (req, res) => {
     const { rows } = await db.query(`
       SELECT 
         r.*,
-        COALESCE(AVG(fr.rating), 0) as average_rating,
-        COUNT(DISTINCT fr.id) as review_count,
+        COALESCE(
+          (SELECT AVG(rating) FROM (
+            SELECT rating FROM food_reviews fr 
+            JOIN foods f ON fr.food_id = f.id 
+            WHERE f.restaurant_id = r.id
+            UNION ALL
+            SELECT rating FROM general_reviews gr 
+            WHERE gr.restaurant_id = r.id
+          ) all_reviews), 0
+        ) as average_rating,
+        (
+          SELECT COUNT(*) FROM (
+            SELECT fr.id FROM food_reviews fr 
+            JOIN foods f ON fr.food_id = f.id 
+            WHERE f.restaurant_id = r.id
+            UNION ALL
+            SELECT gr.id FROM general_reviews gr 
+            WHERE gr.restaurant_id = r.id
+          ) all_reviews
+        ) as review_count,
         COUNT(DISTINCT f.id) as menu_item_count,
         (
           SELECT AVG(food_value) FROM (
@@ -60,7 +95,6 @@ export const getRestaurantById = async (req, res) => {
         ) as average_value
       FROM restaurants r
       LEFT JOIN foods f ON f.restaurant_id = r.id
-      LEFT JOIN food_reviews fr ON fr.food_id = f.id
       WHERE r.id = $1
       GROUP BY r.id
     `, [id]);
@@ -86,8 +120,26 @@ export const searchRestaurants = async (req, res) => {
     const { rows } = await db.query(`
       SELECT 
         r.*,
-        COALESCE(AVG(fr.rating), 0) as average_rating,
-        COUNT(DISTINCT fr.id) as review_count,
+        COALESCE(
+          (SELECT AVG(rating) FROM (
+            SELECT rating FROM food_reviews fr 
+            JOIN foods f ON fr.food_id = f.id 
+            WHERE f.restaurant_id = r.id
+            UNION ALL
+            SELECT rating FROM general_reviews gr 
+            WHERE gr.restaurant_id = r.id
+          ) all_reviews), 0
+        ) as average_rating,
+        (
+          SELECT COUNT(*) FROM (
+            SELECT fr.id FROM food_reviews fr 
+            JOIN foods f ON fr.food_id = f.id 
+            WHERE f.restaurant_id = r.id
+            UNION ALL
+            SELECT gr.id FROM general_reviews gr 
+            WHERE gr.restaurant_id = r.id
+          ) all_reviews
+        ) as review_count,
         COUNT(DISTINCT f.id) as menu_item_count,
         (
           SELECT AVG(food_value) FROM (
@@ -105,7 +157,6 @@ export const searchRestaurants = async (req, res) => {
         ) as average_value
       FROM restaurants r
       LEFT JOIN foods f ON f.restaurant_id = r.id
-      LEFT JOIN food_reviews fr ON fr.food_id = f.id
       WHERE r.name ILIKE $1 OR r.description ILIKE $1
       GROUP BY r.id
       ORDER BY r.id ASC
