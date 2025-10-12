@@ -17,7 +17,7 @@ const app = express(); // <-- ONLY HERE do we declare 'app'
 
 // Configure CORS
 app.use(cors({
-  origin: ['https://poly-bites-frontend.vercel.app', 'http://localhost:3000'], // Your frontend URL
+  origin: ['https://poly-bites-frontend.vercel.app', 'http://localhost:3000', 'https://www.polybites.org'], // Your frontend URL
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
