@@ -25,20 +25,6 @@ export const createMessage = async (req, res) => {
   }
 };
 
-export const getMessages = async (req, res) => {
-  try {
-    const { rows } = await db.query(
-      `SELECT m.id, m.profile_id, m.subject, m.message, m.created_at, p.name as user_name
-       FROM messages m
-       LEFT JOIN profiles p ON m.profile_id = p.id
-       ORDER BY m.created_at DESC`
-    );
-    res.json(rows);
-  } catch (err) {
-    console.error('Database Query Error:', err.message);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
 
 export const getMessageById = async (req, res) => {
   const { id } = req.params;

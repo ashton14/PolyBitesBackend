@@ -1,4 +1,5 @@
 import db from '../models/db.js';
+import { cache } from '../app.js';
 
 export const getGeneralReviews = async (req, res) => {
   try {
@@ -77,6 +78,20 @@ export const createGeneralReview = async (req, res) => {
       'INSERT INTO general_reviews (user_id, restaurant_id, rating, text, anonymous) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [user_id, restaurant_id, rating, text, anonymous]
     );
+
+    // Invalidate relevant caches
+    console.log('🗑️ CACHE INVALIDATION: Clearing caches after new general review');
+    cache.del('/api/general-reviews');
+    cache.del(`/api/general-reviews/restaurant/${restaurant_id}`);
+    cache.del(`/api/general-reviews/restaurant/${restaurant_id}/stats`);
+    cache.del(`/api/general-reviews/user/${user_id}`);
+    
+    // Clear restaurant stats caches (general reviews affect restaurant stats)
+    cache.del('/api/restaurants');
+    cache.del(`/api/restaurants/${restaurant_id}`);
+    cache.del(`/api/restaurants/${restaurant_id}/stats`);
+    cache.del(`/api/restaurants/search?q=*`);
+
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error('Database Query Error:', err.message);
@@ -93,9 +108,9 @@ export const deleteGeneralReview = async (req, res) => {
   }
 
   try {
-    // First check if the review exists and belongs to the user
+    // First check if the review exists and belongs to the user, get restaurant_id for cache invalidation
     const { rows } = await db.query(
-      'SELECT * FROM general_reviews WHERE id = $1 AND user_id = $2',
+      'SELECT restaurant_id FROM general_reviews WHERE id = $1 AND user_id = $2',
       [id, user_id]
     );
 
@@ -103,11 +118,26 @@ export const deleteGeneralReview = async (req, res) => {
       return res.status(404).json({ error: 'General review not found or unauthorized' });
     }
 
+    const restaurant_id = rows[0].restaurant_id;
+
     // Delete all likes associated with this review first
     await db.query('DELETE FROM general_review_likes WHERE general_review_id = $1', [id]);
 
     // Then delete the review
     await db.query('DELETE FROM general_reviews WHERE id = $1 RETURNING *', [id]);
+
+    // Invalidate relevant caches
+    console.log('🗑️ CACHE INVALIDATION: Clearing caches after general review deletion');
+    cache.del('/api/general-reviews');
+    cache.del(`/api/general-reviews/restaurant/${restaurant_id}`);
+    cache.del(`/api/general-reviews/restaurant/${restaurant_id}/stats`);
+    cache.del(`/api/general-reviews/user/${user_id}`);
+    
+    // Clear restaurant stats caches (general reviews affect restaurant stats)
+    cache.del('/api/restaurants');
+    cache.del(`/api/restaurants/${restaurant_id}`);
+    cache.del(`/api/restaurants/${restaurant_id}/stats`);
+    cache.del(`/api/restaurants/search?q=*`);
 
     res.status(200).json({ message: 'Review deleted successfully' });
   } catch (err) {
@@ -167,11 +197,29 @@ export const toggleLike = async (req, res) => {
       );
     }
 
-    // Get the updated like count
+    // Get the updated like count and restaurant_id for cache invalidation
     const { rows: [likeCount] } = await db.query(
       'SELECT COUNT(*) as likes FROM general_review_likes WHERE general_review_id = $1',
       [review_id]
     );
+
+    // Get restaurant_id for cache invalidation
+    const { rows: restaurantRows } = await db.query('SELECT restaurant_id FROM general_reviews WHERE id = $1', [review_id]);
+    const restaurant_id = restaurantRows[0]?.restaurant_id;
+
+    if (restaurant_id) {
+      // Invalidate relevant caches (likes affect review display)
+      console.log('🗑️ CACHE INVALIDATION: Clearing caches after general review like toggle');
+      cache.del('/api/general-reviews');
+      cache.del(`/api/general-reviews/restaurant/${restaurant_id}`);
+      cache.del(`/api/general-reviews/restaurant/${restaurant_id}/stats`);
+      
+      // Clear restaurant stats caches (likes don't affect stats, but keep consistency)
+      cache.del('/api/restaurants');
+      cache.del(`/api/restaurants/${restaurant_id}`);
+      cache.del(`/api/restaurants/${restaurant_id}/stats`);
+      cache.del(`/api/restaurants/search?q=*`);
+    }
 
     res.json({ 
       likes: parseInt(likeCount.likes),

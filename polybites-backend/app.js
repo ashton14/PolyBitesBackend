@@ -31,16 +31,29 @@ const cacheMiddleware = (duration = 300) => {
     const cachedData = cache.get(key);
     
     if (cachedData) {
-      console.log(`Cache HIT for: ${key}`);
+      
+      // Determine data type and count for logging
+      if (cachedData.data && Array.isArray(cachedData.data)) {
+        if (key.includes('restaurant')) {
+          console.log(`✅ RESTAURANTS: Retrieved ${cachedData.data.length} restaurants from CACHE`);
+        } else if (key.includes('food')) {
+          console.log(`✅ FOODS: Retrieved ${cachedData.data.length} foods from CACHE`);
+        }
+      } else if (Array.isArray(cachedData)) {
+        if (key.includes('food')) {
+          console.log(`✅ FOODS: Retrieved ${cachedData.length} foods from CACHE`);
+        }
+      }
+      
       return res.json(cachedData);
     }
     
-    console.log(`Cache MISS for: ${key}`);
     
     // Store original res.json
     const originalJson = res.json;
     res.json = function(data) {
       cache.set(key, data, duration);
+      console.log(`💾 CACHE STORED for: ${key} (TTL: ${duration}s)`);
       originalJson.call(this, data);
     };
     
@@ -87,11 +100,11 @@ app.use('/test', testRouter);
 app.use('/api/restaurants', cacheMiddleware(600), restaurantRoutes); // 10 min cache
 app.use('/api/foods', cacheMiddleware(600), foodRoutes); // 10 min cache
 
-// API Routes without caching (dynamic data)
-app.use('/api/profiles', profileRoutes); // No cache - user data changes frequently
-app.use('/api/food-reviews', foodReviewRoutes); // No cache - reviews added frequently
-app.use('/api/restaurant-reviews', restaurantReviewRoutes); // No cache - reviews added frequently
-app.use('/api/general-reviews', generalReviewRoutes); // No cache - reviews added frequently
+// API Routes with cache invalidation (dynamic data with smart caching)
+app.use('/api/profiles', cacheMiddleware(60), profileRoutes); // 1 min cache
+app.use('/api/food-reviews', cacheMiddleware(600), foodReviewRoutes); // 10 min cache with invalidation
+app.use('/api/restaurant-reviews', cacheMiddleware(600), restaurantReviewRoutes); // 10 min cache with invalidation
+app.use('/api/general-reviews', cacheMiddleware(600), generalReviewRoutes); // 10 min cache with invalidation
 app.use('/api/messages', messageRoutes); // No cache - real-time messages
 
 // Start Server

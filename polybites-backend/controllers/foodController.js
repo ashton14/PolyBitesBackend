@@ -22,48 +22,35 @@ async function getFoodStatsMap(foodIds) {
 
 export const getFoods = async (req, res) => {
   try {
-    // Pagination parameters
-    const page = parseInt(req.query.page) || 1;
-    const limit = Math.min(parseInt(req.query.limit) || 20, 100); // Max 100 items per request
-    const offset = (page - 1) * limit;
+    console.log(`🍽️ FOODS: Fetching from DATABASE QUERY`);
     
-    // Get total count for pagination info
-    const { rows: countRows } = await db.query('SELECT COUNT(*) FROM foods');
-    const totalCount = parseInt(countRows[0].count);
+    // Get all foods with stats in a single optimized query
+    const { rows } = await db.query(`
+      SELECT 
+        f.*,
+        COALESCE(COUNT(fr.id), 0) as review_count,
+        COALESCE(AVG(fr.rating), 0) as average_rating,
+        CASE 
+          WHEN COUNT(fr.id) > 0 AND f.price > 0 
+          THEN AVG(fr.rating) / f.price 
+          ELSE NULL 
+        END as value
+      FROM foods f
+      LEFT JOIN food_reviews fr ON f.id = fr.food_id
+      GROUP BY f.id
+      ORDER BY f.id ASC
+    `);
     
-    // Get paginated foods
-    const { rows } = await db.query(
-      'SELECT * FROM foods ORDER BY id ASC LIMIT $1 OFFSET $2',
-      [limit, offset]
-    );
+    // Convert string values to appropriate types
+    const foodsWithStats = rows.map(food => ({
+      ...food,
+      review_count: parseInt(food.review_count),
+      average_rating: parseFloat(food.average_rating),
+      value: food.value ? parseFloat(food.value) : null
+    }));
     
-    const foodIds = rows.map(f => f.id);
-    const statsMap = await getFoodStatsMap(foodIds);
-    const foodsWithStats = rows.map(food => {
-      const stats = statsMap[food.id] || { review_count: 0, average_rating: 0 };
-      let value = null;
-      if (stats.review_count > 0 && food.price > 0) {
-        value = stats.average_rating / food.price;
-      }
-      return {
-        ...food,
-        average_rating: stats.average_rating,
-        review_count: stats.review_count,
-        value
-      };
-    });
-    
-    res.json({
-      data: foodsWithStats,
-      pagination: {
-        page,
-        limit,
-        totalCount,
-        totalPages: Math.ceil(totalCount / limit),
-        hasNextPage: page < Math.ceil(totalCount / limit),
-        hasPrevPage: page > 1
-      }
-    });
+    console.log(`✅ FOODS: Retrieved ${foodsWithStats.length} foods from DATABASE QUERY`);
+    res.json({ data: foodsWithStats });
   } catch (err) {
     console.error('Database Query Error:', err.message);
     res.status(500).json({ error: 'Internal server error' });
@@ -99,22 +86,35 @@ export const getFoodById = async (req, res) => {
 export const getFoodsByRestaurantId = async (req, res) => {
   const { restaurantId } = req.params;
   try {
-    const { rows } = await db.query('SELECT * FROM foods WHERE restaurant_id = $1', [restaurantId]);
-    const foodIds = rows.map(f => f.id);
-    const statsMap = await getFoodStatsMap(foodIds);
-    const foodsWithStats = rows.map(food => {
-      const stats = statsMap[food.id] || { review_count: 0, average_rating: 0 };
-      let value = null;
-      if (stats.review_count > 0 && food.price > 0) {
-        value = stats.average_rating / food.price;
-      }
-      return {
-        ...food,
-        average_rating: stats.average_rating,
-        review_count: stats.review_count,
-        value
-      };
-    });
+    console.log(`🍽️ FOODS BY RESTAURANT: Fetching from DATABASE QUERY for restaurant ${restaurantId}`);
+    
+    // Single optimized query instead of multiple queries
+    const { rows } = await db.query(`
+      SELECT 
+        f.*,
+        COALESCE(COUNT(fr.id), 0) as review_count,
+        COALESCE(AVG(fr.rating), 0) as average_rating,
+        CASE 
+          WHEN COUNT(fr.id) > 0 AND f.price > 0 
+          THEN AVG(fr.rating) / f.price 
+          ELSE NULL 
+        END as value
+      FROM foods f
+      LEFT JOIN food_reviews fr ON f.id = fr.food_id
+      WHERE f.restaurant_id = $1
+      GROUP BY f.id
+      ORDER BY f.id ASC
+    `, [restaurantId]);
+    
+    // Convert string values to appropriate types
+    const foodsWithStats = rows.map(food => ({
+      ...food,
+      review_count: parseInt(food.review_count),
+      average_rating: parseFloat(food.average_rating),
+      value: food.value ? parseFloat(food.value) : null
+    }));
+    
+    console.log(`✅ FOODS BY RESTAURANT: Retrieved ${foodsWithStats.length} foods from DATABASE QUERY`);
     res.json(foodsWithStats);
   } catch (err) {
     console.error('Database Query Error:', err.message);
@@ -127,39 +127,48 @@ export const searchFoodsByRestaurantId = async (req, res) => {
   const { q } = req.query; // search query parameter
   
   try {
-    let query, params;
-    
     if (!q || q.trim() === '') {
       // If no search query, return all foods for the restaurant
       return getFoodsByRestaurantId(req, res);
     }
 
-    const searchTerm = `%${q.trim()}%`;
-    query = `
-      SELECT * FROM foods 
-      WHERE restaurant_id = $1 
-      AND (name ILIKE $2 OR description ILIKE $2)
-      ORDER BY id ASC
-    `;
-    params = [restaurantId, searchTerm];
+    console.log(`🔍 FOOD SEARCH: Fetching from DATABASE QUERY for restaurant ${restaurantId}, search term: "${q}"`);
 
-    const { rows } = await db.query(query, params);
-    const foodIds = rows.map(f => f.id);
-    const statsMap = await getFoodStatsMap(foodIds);
-    const foodsWithStats = rows.map(food => {
-      const stats = statsMap[food.id] || { review_count: 0, average_rating: 0 };
-      let value = null;
-      if (stats.review_count > 0 && food.price > 0) {
-        value = stats.average_rating / food.price;
-      }
-      return {
-        ...food,
-        average_rating: stats.average_rating,
-        review_count: stats.review_count,
-        value
-      };
-    });
-    res.json(foodsWithStats);
+    // Get all foods for the restaurant first (this will be cached)
+    const { rows } = await db.query(`
+      SELECT 
+        f.*,
+        COALESCE(COUNT(fr.id), 0) as review_count,
+        COALESCE(AVG(fr.rating), 0) as average_rating,
+        CASE 
+          WHEN COUNT(fr.id) > 0 AND f.price > 0 
+          THEN AVG(fr.rating) / f.price 
+          ELSE NULL 
+        END as value
+      FROM foods f
+      LEFT JOIN food_reviews fr ON f.id = fr.food_id
+      WHERE f.restaurant_id = $1
+      GROUP BY f.id
+      ORDER BY f.id ASC
+    `, [restaurantId]);
+
+    // Convert string values to appropriate types
+    const foodsWithStats = rows.map(food => ({
+      ...food,
+      review_count: parseInt(food.review_count),
+      average_rating: parseFloat(food.average_rating),
+      value: food.value ? parseFloat(food.value) : null
+    }));
+
+    // Client-side filtering - much faster than database queries
+    const searchTerm = q.trim().toLowerCase();
+    const filteredFoods = foodsWithStats.filter(food => 
+      food.name.toLowerCase().includes(searchTerm) ||
+      (food.description && food.description.toLowerCase().includes(searchTerm))
+    );
+    
+    console.log(`✅ FOOD SEARCH: Found ${filteredFoods.length} results from DATABASE QUERY + LOCAL FILTERING`);
+    res.json(filteredFoods);
   } catch (err) {
     console.error('Database Query Error:', err.message);
     res.status(500).json({ error: 'Internal server error' });

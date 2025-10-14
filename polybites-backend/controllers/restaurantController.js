@@ -2,16 +2,9 @@ import db from '../models/db.js';
 
 export const getRestaurants = async (req, res) => {
   try {
-    // Pagination parameters
-    const page = parseInt(req.query.page) || 1;
-    const limit = Math.min(parseInt(req.query.limit) || 20, 100); // Max 100 items per request
-    const offset = (page - 1) * limit;
+    console.log(`📊 RESTAURANTS: Fetching from DATABASE QUERY`);
     
-    // Get total count for pagination info
-    const { rows: countRows } = await db.query('SELECT COUNT(*) FROM restaurants');
-    const totalCount = parseInt(countRows[0].count);
-    
-    // Get paginated restaurants with simplified query for better performance
+    // No pagination needed for 30 restaurants - just get all restaurants
     const { rows } = await db.query(`
       SELECT 
         r.*,
@@ -20,20 +13,10 @@ export const getRestaurants = async (req, res) => {
       LEFT JOIN foods f ON f.restaurant_id = r.id
       GROUP BY r.id
       ORDER BY r.id ASC
-      LIMIT $1 OFFSET $2
-    `, [limit, offset]);
+    `);
     
-    res.json({
-      data: rows,
-      pagination: {
-        page,
-        limit,
-        totalCount,
-        totalPages: Math.ceil(totalCount / limit),
-        hasNextPage: page < Math.ceil(totalCount / limit),
-        hasPrevPage: page > 1
-      }
-    });
+    console.log(`✅ RESTAURANTS: Retrieved ${rows.length} restaurants from DATABASE QUERY`);
+    res.json({ data: rows });
   } catch (err) {
     console.error('Database Query Error:', err.message);
     res.status(500).json({ error: 'Internal server error' });
@@ -126,52 +109,28 @@ export const searchRestaurants = async (req, res) => {
       return getRestaurants(req, res); // fallback to get all restaurants
     }
 
-    const searchTerm = `%${q.trim()}%`;
+    console.log(`🔍 RESTAURANT SEARCH: Fetching from DATABASE QUERY for search term: "${q}"`);
+    
+    // Get all restaurants first (this will be cached)
     const { rows } = await db.query(`
       SELECT 
         r.*,
-        COALESCE(
-          (SELECT AVG(rating) FROM (
-            SELECT rating FROM food_reviews fr 
-            JOIN foods f ON fr.food_id = f.id 
-            WHERE f.restaurant_id = r.id
-            UNION ALL
-            SELECT rating FROM general_reviews gr 
-            WHERE gr.restaurant_id = r.id
-          ) all_reviews), 0
-        ) as average_rating,
-        (
-          SELECT COUNT(*) FROM (
-            SELECT fr.id FROM food_reviews fr 
-            JOIN foods f ON fr.food_id = f.id 
-            WHERE f.restaurant_id = r.id
-            UNION ALL
-            SELECT gr.id FROM general_reviews gr 
-            WHERE gr.restaurant_id = r.id
-          ) all_reviews
-        ) as review_count,
-        COUNT(DISTINCT f.id) as menu_item_count,
-        (
-          SELECT AVG(food_value) FROM (
-            SELECT 
-              CASE WHEN COUNT(fr2.id) > 0 AND f2.price > 0 
-                THEN AVG(fr2.rating) / f2.price 
-                ELSE NULL 
-              END as food_value
-            FROM foods f2
-            LEFT JOIN food_reviews fr2 ON fr2.food_id = f2.id
-            WHERE f2.restaurant_id = r.id
-            GROUP BY f2.id
-            HAVING COUNT(fr2.id) > 0 AND f2.price > 0
-          ) as food_values
-        ) as average_value
+        COUNT(DISTINCT f.id) as menu_item_count
       FROM restaurants r
       LEFT JOIN foods f ON f.restaurant_id = r.id
-      WHERE r.name ILIKE $1 OR r.description ILIKE $1
       GROUP BY r.id
       ORDER BY r.id ASC
-    `, [searchTerm]);
-    res.json(rows);
+    `);
+    
+    // Client-side filtering - much faster than database queries
+    const searchTerm = q.trim().toLowerCase();
+    const filteredRestaurants = rows.filter(restaurant => 
+      restaurant.name.toLowerCase().includes(searchTerm) ||
+      (restaurant.description && restaurant.description.toLowerCase().includes(searchTerm))
+    );
+    
+    console.log(`✅ RESTAURANT SEARCH: Found ${filteredRestaurants.length} results from DATABASE QUERY + LOCAL FILTERING`);
+    res.json({ data: filteredRestaurants });
   } catch (err) {
     console.error('Database Query Error:', err.message);
     res.status(500).json({ error: 'Internal server error' });

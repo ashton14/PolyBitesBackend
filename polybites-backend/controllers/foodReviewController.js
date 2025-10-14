@@ -1,4 +1,5 @@
 import db from '../models/db.js';
+import { cache } from '../app.js';
 
 export const getFoodReviews = async (req, res) => {
   try {
@@ -100,10 +101,32 @@ export const createFoodReview = async (req, res) => {
   const { user_id, food_id, rating, text, anonymous } = req.body;
 
   try {
+    // Get restaurant_id for cache invalidation
+    const { rows: foodRows } = await db.query('SELECT restaurant_id FROM foods WHERE id = $1', [food_id]);
+    const restaurant_id = foodRows[0]?.restaurant_id;
+
     const { rows } = await db.query(
       'INSERT INTO food_reviews (user_id, food_id, rating, text, anonymous) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [user_id, food_id, rating, text, anonymous]
     );
+
+    // Invalidate relevant caches
+    console.log('🗑️ CACHE INVALIDATION: Clearing caches after new food review');
+    cache.del('/api/food-reviews');
+    cache.del(`/api/food-reviews/food/${food_id}`);
+    cache.del(`/api/food-reviews/food/${food_id}/stats`);
+    cache.del('/api/foods');
+    cache.del(`/api/foods/restaurant/${restaurant_id}`);
+    cache.del(`/api/foods/restaurant/${restaurant_id}?q=*`);
+    
+    // Clear restaurant stats caches (food reviews affect restaurant stats)
+    if (restaurant_id) {
+      cache.del('/api/restaurants');
+      cache.del(`/api/restaurants/${restaurant_id}`);
+      cache.del(`/api/restaurants/${restaurant_id}/stats`);
+      cache.del(`/api/restaurants/search?q=*`);
+    }
+
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error('Database Query Error:', err.message);
@@ -171,9 +194,9 @@ export const deleteFoodReview = async (req, res) => {
   }
 
   try {
-    // First check if the review exists and belongs to the user
+    // First check if the review exists and belongs to the user, get food_id for cache invalidation
     const { rows } = await db.query(
-      'SELECT * FROM food_reviews WHERE id = $1 AND user_id = $2',
+      'SELECT food_id FROM food_reviews WHERE id = $1 AND user_id = $2',
       [id, user_id]
     );
 
@@ -181,11 +204,34 @@ export const deleteFoodReview = async (req, res) => {
       return res.status(404).json({ error: 'Food review not found or unauthorized' });
     }
 
+    const food_id = rows[0].food_id;
+
+    // Get restaurant_id for cache invalidation
+    const { rows: foodRows } = await db.query('SELECT restaurant_id FROM foods WHERE id = $1', [food_id]);
+    const restaurant_id = foodRows[0]?.restaurant_id;
+
     // Delete all likes associated with this review first
     await db.query('DELETE FROM food_review_likes WHERE food_review_id = $1', [id]);
 
     // Then delete the review
     await db.query('DELETE FROM food_reviews WHERE id = $1 RETURNING *', [id]);
+
+    // Invalidate relevant caches
+    console.log('🗑️ CACHE INVALIDATION: Clearing caches after food review deletion');
+    cache.del('/api/food-reviews');
+    cache.del(`/api/food-reviews/food/${food_id}`);
+    cache.del(`/api/food-reviews/food/${food_id}/stats`);
+    cache.del('/api/foods');
+    cache.del(`/api/foods/restaurant/${restaurant_id}`);
+    cache.del(`/api/foods/restaurant/${restaurant_id}?q=*`);
+    
+    // Clear restaurant stats caches (food reviews affect restaurant stats)
+    if (restaurant_id) {
+      cache.del('/api/restaurants');
+      cache.del(`/api/restaurants/${restaurant_id}`);
+      cache.del(`/api/restaurants/${restaurant_id}/stats`);
+      cache.del(`/api/restaurants/search?q=*`);
+    }
 
     res.status(200).json({ message: 'Review deleted successfully' });
   } catch (err) {
@@ -243,11 +289,36 @@ export const toggleLike = async (req, res) => {
       );
     }
 
-    // Get the updated like count
+    // Get the updated like count and food_id for cache invalidation
     const { rows: [likeCount] } = await db.query(
       'SELECT COUNT(*) as likes FROM food_review_likes WHERE food_review_id = $1',
       [review_id]
     );
+
+    // Get food_id for cache invalidation
+    const { rows: foodRows } = await db.query('SELECT food_id FROM food_reviews WHERE id = $1', [review_id]);
+    const food_id = foodRows[0]?.food_id;
+
+    if (food_id) {
+      // Get restaurant_id for cache invalidation
+      const { rows: restaurantRows } = await db.query('SELECT restaurant_id FROM foods WHERE id = $1', [food_id]);
+      const restaurant_id = restaurantRows[0]?.restaurant_id;
+
+      // Invalidate relevant caches (likes affect review display)
+      console.log('🗑️ CACHE INVALIDATION: Clearing caches after like toggle');
+      cache.del('/api/food-reviews');
+      cache.del(`/api/food-reviews/food/${food_id}`);
+      cache.del(`/api/food-reviews/food/${food_id}/stats`);
+      cache.del('/api/foods');
+      cache.del(`/api/foods/restaurant/${restaurant_id}`);
+      cache.del(`/api/foods/restaurant/${restaurant_id}?q=*`);
+      
+      // Clear restaurant stats caches (likes don't affect stats, but keep consistency)
+      cache.del('/api/restaurants');
+      cache.del(`/api/restaurants/${restaurant_id}`);
+      cache.del(`/api/restaurants/${restaurant_id}/stats`);
+      cache.del(`/api/restaurants/search?q=*`);
+    }
 
     res.json({ 
       likes: parseInt(likeCount.likes),
