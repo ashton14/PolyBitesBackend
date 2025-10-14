@@ -55,6 +55,15 @@ export const getFoodReviewsByRestaurantId = async (req, res) => {
 
 export const getFoodReviewDetails = async (req, res) => {
   try {
+    // Add pagination and limits to prevent excessive data transfer
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200); // Max 200 items per request
+    const offset = (page - 1) * limit;
+    
+    // Get total count for pagination info
+    const { rows: countRows } = await db.query('SELECT COUNT(DISTINCT r.id) FROM restaurants r');
+    const totalCount = parseInt(countRows[0].count);
+    
     const { rows } = await db.query(
       `SELECT 
         r.id as restaurant_id,
@@ -65,9 +74,22 @@ export const getFoodReviewDetails = async (req, res) => {
        LEFT JOIN foods f ON f.restaurant_id = r.id
        LEFT JOIN food_reviews fr ON fr.food_id = f.id
        GROUP BY r.id, r.name
-       ORDER BY review_count DESC`
+       ORDER BY review_count DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
     );
-    res.json(rows);
+    
+    res.json({
+      data: rows,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+        hasNextPage: page < Math.ceil(totalCount / limit),
+        hasPrevPage: page > 1
+      }
+    });
   } catch (err) {
     console.error('Database Query Error:', err.message);
     res.status(500).json({ error: 'Internal server error' });

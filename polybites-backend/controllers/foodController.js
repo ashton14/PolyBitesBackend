@@ -22,7 +22,21 @@ async function getFoodStatsMap(foodIds) {
 
 export const getFoods = async (req, res) => {
   try {
-    const { rows } = await db.query('SELECT * FROM foods ORDER BY id ASC');
+    // Pagination parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100); // Max 100 items per request
+    const offset = (page - 1) * limit;
+    
+    // Get total count for pagination info
+    const { rows: countRows } = await db.query('SELECT COUNT(*) FROM foods');
+    const totalCount = parseInt(countRows[0].count);
+    
+    // Get paginated foods
+    const { rows } = await db.query(
+      'SELECT * FROM foods ORDER BY id ASC LIMIT $1 OFFSET $2',
+      [limit, offset]
+    );
+    
     const foodIds = rows.map(f => f.id);
     const statsMap = await getFoodStatsMap(foodIds);
     const foodsWithStats = rows.map(food => {
@@ -38,7 +52,18 @@ export const getFoods = async (req, res) => {
         value
       };
     });
-    res.json(foodsWithStats);
+    
+    res.json({
+      data: foodsWithStats,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+        hasNextPage: page < Math.ceil(totalCount / limit),
+        hasPrevPage: page > 1
+      }
+    });
   } catch (err) {
     console.error('Database Query Error:', err.message);
     res.status(500).json({ error: 'Internal server error' });
