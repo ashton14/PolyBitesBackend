@@ -263,7 +263,9 @@ export const deleteFoodReview = async (req, res) => {
     // Clear restaurant-specific caches (food reviews affect restaurant averages/stats)
     if (restaurant_id) {
       // OPTIMIZATION: Only clear caches that actually contain review data
+      console.log(`🗑️ CACHE INVALIDATION: Clearing restaurant stats cache for restaurant ${restaurant_id}`);
       cache.del(`/api/restaurants/${restaurant_id}/stats`);     // Restaurant stats (includes food review averages)
+      console.log(`🗑️ CACHE INVALIDATION: Cleared cache for /api/restaurants/${restaurant_id}/stats`);
       
       // Note: NOT clearing basic restaurant endpoints since they don't include review averages:
       // - /api/restaurants (only has menu_item_count)

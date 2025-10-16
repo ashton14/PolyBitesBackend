@@ -52,6 +52,7 @@ export const getRestaurantById = async (req, res) => {
 export const getRestaurantStats = async (req, res) => {
   const { id } = req.params;
   try {
+    console.log(`📊 RESTAURANT STATS: Fetching from DATABASE QUERY for restaurant ${id}`);
     const { rows } = await db.query(`
       SELECT 
         COALESCE(
@@ -94,6 +95,8 @@ export const getRestaurantStats = async (req, res) => {
       return res.status(404).json({ error: 'Restaurant not found' });
     }
     
+    console.log(`📊 RESTAURANT STATS: Retrieved stats for restaurant ${id} from DATABASE QUERY`);
+    console.log(`📊 RESTAURANT STATS: Average rating: ${rows[0].average_rating}, Review count: ${rows[0].review_count}`);
     res.json(rows[0]);
   } catch (err) {
     console.error('Database Query Error:', err.message);
