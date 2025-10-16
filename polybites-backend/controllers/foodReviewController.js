@@ -110,21 +110,38 @@ export const createFoodReview = async (req, res) => {
       [user_id, food_id, rating, text, anonymous]
     );
 
-    // Invalidate relevant caches
-    console.log('🗑️ CACHE INVALIDATION: Clearing caches after new food review');
+    // Invalidate relevant caches - TARGETED for specific restaurant/food
+    console.log(`🗑️ CACHE INVALIDATION: Clearing caches for restaurant ${restaurant_id} after new food review`);
+    
+    // Clear food review caches (general list and specific food reviews)
     cache.del('/api/food-reviews');
     cache.del(`/api/food-reviews/food/${food_id}`);
     cache.del(`/api/food-reviews/food/${food_id}/stats`);
-    cache.del('/api/foods');
+    cache.del(`/api/food-reviews/restaurant/${restaurant_id}/stats`); // Food item cards use this endpoint
+    
+    // Clear individual food cache (includes review stats)
+    cache.del(`/api/foods/${food_id}`);
+    
+    // OPTIMIZATION: Only clear global foods cache if it exists and is being used
+    // This avoids unnecessary cache operations when the global list isn't cached
+    if (cache.get('/api/foods')) {
+      console.log('🗑️ Clearing global foods cache due to review change');
+      cache.del('/api/foods');
+    }
+    
+    // Clear food caches for THIS specific restaurant only
     cache.del(`/api/foods/restaurant/${restaurant_id}`);
     cache.del(`/api/foods/restaurant/${restaurant_id}?q=*`);
     
-    // Clear restaurant stats caches (food reviews affect restaurant stats)
+    // Clear restaurant-specific caches (food reviews affect restaurant averages/stats)
     if (restaurant_id) {
-      cache.del('/api/restaurants');
-      cache.del(`/api/restaurants/${restaurant_id}`);
-      cache.del(`/api/restaurants/${restaurant_id}/stats`);
-      cache.del(`/api/restaurants/search?q=*`);
+      // OPTIMIZATION: Only clear caches that actually contain review data
+      cache.del(`/api/restaurants/${restaurant_id}/stats`);     // Restaurant stats (includes food review averages)
+      
+      // Note: NOT clearing basic restaurant endpoints since they don't include review averages:
+      // - /api/restaurants (only has menu_item_count)
+      // - /api/restaurants/${restaurant_id} (only has menu_item_count)  
+      // - /api/restaurants/search (only has basic info + filtering)
     }
 
     res.status(201).json(rows[0]);
@@ -156,6 +173,7 @@ export const getFoodReviewStats = async (req, res) => {
 export const getFoodReviewStatsByRestaurant = async (req, res) => {
   const { restaurantId } = req.params;
   try {
+    console.log(`📊 FOOD REVIEW STATS BY RESTAURANT: Fetching from DATABASE QUERY for restaurant ${restaurantId}`);
     const { rows } = await db.query(
       `SELECT 
         f.id as food_id,
@@ -178,6 +196,8 @@ export const getFoodReviewStatsByRestaurant = async (req, res) => {
       };
     });
     
+    console.log(`📊 FOOD REVIEW STATS BY RESTAURANT: Retrieved stats for ${Object.keys(ratingsMap).length} foods from DATABASE QUERY`);
+    console.log(`📊 FOOD REVIEW STATS BY RESTAURANT: Sample ratings:`, Object.entries(ratingsMap).slice(0, 3).map(([id, stats]) => ({food_id: id, ...stats})));
     res.json(ratingsMap);
   } catch (err) {
     console.error('Database Query Error:', err.message);
@@ -216,21 +236,39 @@ export const deleteFoodReview = async (req, res) => {
     // Then delete the review
     await db.query('DELETE FROM food_reviews WHERE id = $1 RETURNING *', [id]);
 
-    // Invalidate relevant caches
-    console.log('🗑️ CACHE INVALIDATION: Clearing caches after food review deletion');
+    // Invalidate relevant caches - TARGETED for specific restaurant/food
+    console.log(`🗑️ CACHE INVALIDATION: Clearing caches for restaurant ${restaurant_id} after food review deletion`);
+    console.log(`🗑️ CACHE INVALIDATION: Food ID ${food_id} rating should be recalculated`);
+    
+    // Clear food review caches
     cache.del('/api/food-reviews');
     cache.del(`/api/food-reviews/food/${food_id}`);
     cache.del(`/api/food-reviews/food/${food_id}/stats`);
-    cache.del('/api/foods');
+    cache.del(`/api/food-reviews/restaurant/${restaurant_id}/stats`); // Food item cards use this endpoint
+    
+    // Clear individual food cache (includes review stats)
+    cache.del(`/api/foods/${food_id}`);
+    
+    // OPTIMIZATION: Only clear global foods cache if it exists and is being used
+    // This avoids unnecessary cache operations when the global list isn't cached
+    if (cache.get('/api/foods')) {
+      console.log('🗑️ Clearing global foods cache due to review change');
+      cache.del('/api/foods');
+    }
+    
+    // Clear food caches for THIS specific restaurant only
     cache.del(`/api/foods/restaurant/${restaurant_id}`);
     cache.del(`/api/foods/restaurant/${restaurant_id}?q=*`);
     
-    // Clear restaurant stats caches (food reviews affect restaurant stats)
+    // Clear restaurant-specific caches (food reviews affect restaurant averages/stats)
     if (restaurant_id) {
-      cache.del('/api/restaurants');
-      cache.del(`/api/restaurants/${restaurant_id}`);
-      cache.del(`/api/restaurants/${restaurant_id}/stats`);
-      cache.del(`/api/restaurants/search?q=*`);
+      // OPTIMIZATION: Only clear caches that actually contain review data
+      cache.del(`/api/restaurants/${restaurant_id}/stats`);     // Restaurant stats (includes food review averages)
+      
+      // Note: NOT clearing basic restaurant endpoints since they don't include review averages:
+      // - /api/restaurants (only has menu_item_count)
+      // - /api/restaurants/${restaurant_id} (only has menu_item_count)  
+      // - /api/restaurants/search (only has basic info + filtering)
     }
 
     res.status(200).json({ message: 'Review deleted successfully' });
@@ -304,20 +342,13 @@ export const toggleLike = async (req, res) => {
       const { rows: restaurantRows } = await db.query('SELECT restaurant_id FROM foods WHERE id = $1', [food_id]);
       const restaurant_id = restaurantRows[0]?.restaurant_id;
 
-      // Invalidate relevant caches (likes affect review display)
-      console.log('🗑️ CACHE INVALIDATION: Clearing caches after like toggle');
+      // Invalidate relevant caches (likes affect review display only)
+      console.log(`🗑️ CACHE INVALIDATION: Clearing review display caches after like toggle for restaurant ${restaurant_id}`);
       cache.del('/api/food-reviews');
       cache.del(`/api/food-reviews/food/${food_id}`);
-      cache.del(`/api/food-reviews/food/${food_id}/stats`);
-      cache.del('/api/foods');
       cache.del(`/api/foods/restaurant/${restaurant_id}`);
       cache.del(`/api/foods/restaurant/${restaurant_id}?q=*`);
-      
-      // Clear restaurant stats caches (likes don't affect stats, but keep consistency)
-      cache.del('/api/restaurants');
-      cache.del(`/api/restaurants/${restaurant_id}`);
-      cache.del(`/api/restaurants/${restaurant_id}/stats`);
-      cache.del(`/api/restaurants/search?q=*`);
+      // Note: NOT clearing restaurant stats since likes don't affect ratings
     }
 
     res.json({ 

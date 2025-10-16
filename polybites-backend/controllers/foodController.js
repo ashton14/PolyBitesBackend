@@ -49,7 +49,8 @@ export const getFoods = async (req, res) => {
       value: food.value ? parseFloat(food.value) : null
     }));
     
-    console.log(`✅ FOODS: Retrieved ${foodsWithStats.length} foods from DATABASE QUERY`);
+    console.log(`✅ FOODS BY RESTAURANT: Retrieved ${foodsWithStats.length} foods from DATABASE QUERY`);
+    console.log(`✅ FOODS BY RESTAURANT: Sample food ratings:`, foodsWithStats.slice(0, 3).map(f => ({id: f.id, name: f.name, rating: f.average_rating})));
     res.json({ data: foodsWithStats });
   } catch (err) {
     console.error('Database Query Error:', err.message);
@@ -60,6 +61,7 @@ export const getFoods = async (req, res) => {
 export const getFoodById = async (req, res) => {
   const { id } = req.params;
   try {
+    console.log(`🍽️ FOOD BY ID: Fetching from DATABASE QUERY for food ${id}`);
     const { rows } = await db.query('SELECT * FROM foods WHERE id = $1', [id]);
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Food item not found' });
@@ -67,6 +69,7 @@ export const getFoodById = async (req, res) => {
     const food = rows[0];
     const statsMap = await getFoodStatsMap([food.id]);
     const stats = statsMap[food.id] || { review_count: 0, average_rating: 0 };
+    console.log(`🍽️ FOOD BY ID: Food ${id} has ${stats.review_count} reviews, avg rating: ${stats.average_rating}`);
     let value = null;
     if (stats.review_count > 0 && food.price > 0) {
       value = stats.average_rating / food.price;
